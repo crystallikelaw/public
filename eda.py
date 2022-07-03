@@ -109,9 +109,6 @@ class incident:
             return self.clean
         except:
             print('uncaught exception')
-            # newcols
-            df_final['posti'] = df_final.date_time >= self.incident_date
-            df_final['day_of_week'] = df_final.date_time.dt.day
             return self.failedclean()
 
     def failedclean(self):
@@ -120,6 +117,9 @@ class incident:
         df = self._rawdata
         df['date_time'] = pd.to_datetime(df.date + df.time, format="%m/%d/%Y%H:%M:%S")
         self.data = df.drop(['date', 'time'], axis=1)
+        # newcols
+        df['posti'] = df.date_time >= self.incident_date
+        df['day_of_week'] = df.date_time.dt.day
         print(df.info())
         return 0
 
