@@ -4,10 +4,14 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 sns.set_palette("pastel")
-sns.set_theme(style="ticks", rc={"axes.spines.right": False, "axes.spines.top": False})
+sns.set_theme(style="ticks", rc={
+              "axes.spines.right": False, "axes.spines.top": False})
 
 
 def get_data(week_nums):
+    '''
+    retrieves data from mta website and concatenates it
+    '''
     url = "http://web.mta.info/developers/data/nyct/turnstile/turnstile_{}.txt"
     dfs = []
     for week_num in week_nums:
@@ -18,6 +22,10 @@ def get_data(week_nums):
 
 
 class incident:
+    '''
+    class to check before/after incident statistics; graphs
+    '''
+
     def __init__(self, period: list, idate: str, stations: list = 0, lines: list = 0, daily: bool = 1):
         self._rawdata = get_data(period)
         self.incident_date = idate
@@ -30,6 +38,9 @@ class incident:
             print('Warning: No line/station given')
 
     def cleaner(self):
+        '''
+        cleans df, populates self.data. calls failedclean() on fail
+        '''
         df = self._rawdata
 
         # column names
@@ -54,7 +65,8 @@ class incident:
 
             # only relevant stations/lines
             if self.lines and self.stations:
-                df_relevant = df[df.station.isin(self.stations) & df.linename.isin(self.lines)].copy()
+                df_relevant = df[df.station.isin(
+                    self.stations) & df.linename.isin(self.lines)].copy()
             elif self.lines:
                 df_relevant = df[df.linename.isin(self.lines)].copy()
             else:
@@ -66,12 +78,15 @@ class incident:
                 return self.failedclean()
 
             if self.daily:  # combining daily entries, max(cumulative)
-                df_final = df_relevant.groupby(uniqueturn + ['date'], as_index=False)[['entries', 'exits']].max()
-                df_final['date_time'] = pd.to_datetime(df_final.date, format="%m/%d/%Y")
+                df_final = df_relevant.groupby(
+                    uniqueturn + ['date'], as_index=False)[['entries', 'exits']].max()
+                df_final['date_time'] = pd.to_datetime(
+                    df_final.date, format="%m/%d/%Y")
                 df_final = df_final.drop(['date'], axis=1)
             else:
                 df_final = df_relevant
-                df_final['date_time'] = pd.to_datetime(df_final.date + df_final.time, format="%m/%d/%Y%H:%M:%S")
+                df_final['date_time'] = pd.to_datetime(
+                    df_final.date + df_final.time, format="%m/%d/%Y%H:%M:%S")
                 df_final = df_final.drop(['date', 'time'], axis=1)
 
             # duplicate check
@@ -81,7 +96,8 @@ class incident:
 
             # cumulative into differences; |a|
             df_final[['daily_entries', 'daily_exits']] =\
-                np.abs(df_final.groupby(uniqueturn)[['entries', 'exits']].diff())
+                np.abs(df_final.groupby(uniqueturn)[
+                       ['entries', 'exits']].diff())
             pd.to_numeric(df_final.daily_entries, downcast='integer')
             pd.to_numeric(df_final.daily_exits, downcast='integer')
 
@@ -92,7 +108,8 @@ class incident:
                     df_final = df_final[df_final[col] < 10 ** 4]
                     # self.clean = 0
             if not self.daily:
-                df_final.rename(columns={'daily_entries': 'hourly_entries', 'daily_exits': 'hourly_exits'})
+                df_final.rename(
+                    columns={'daily_entries': 'hourly_entries', 'daily_exits': 'hourly_exits'})
 
             # final oops
             if df_final.size == 0:
@@ -103,7 +120,8 @@ class incident:
             df_final['posti'] = df_final.date_time >= self.incident_date
             df_final['day_of_week'] = df_final.date_time.dt.day
 
-            self.data = df_final.sort_values('date_time').reset_index().drop(['index'], axis=1)
+            self.data = df_final.sort_values(
+                'date_time').reset_index().drop(['index'], axis=1)
             print('Cleaned!')
             self.clean = self.clean == -1
             return self.clean
@@ -112,10 +130,14 @@ class incident:
             return self.failedclean()
 
     def failedclean(self):
+        '''
+        if cleaner() fails, notes this and constructs barebones uncleaned self.data
+        '''
         print('\nCleaning failed\n')
         self.clean = 0
         df = self._rawdata
-        df['date_time'] = pd.to_datetime(df.date + df.time, format="%m/%d/%Y%H:%M:%S")
+        df['date_time'] = pd.to_datetime(
+            df.date + df.time, format="%m/%d/%Y%H:%M:%S")
         self.data = df.drop(['date', 'time'], axis=1)
         # newcols
         df['posti'] = df.date_time >= self.incident_date
@@ -124,6 +146,9 @@ class incident:
         return 0
 
     def cleancheck(self):
+        '''
+        checks if data has been cleaned, prints warning if it failed
+        '''
         if self.data.size == 0:
             self.cleaner()
         if not self.clean:
@@ -131,14 +156,23 @@ class incident:
         return 0
 
     def before(self):
+        '''
+        dataframe before incident
+        '''
         self.cleancheck()
         return self.data[~self.data.posti]
 
     def after(self):
+        '''
+        dataframe after (and including) incident
+        '''
         self.cleancheck()
         return self.data[self.data.posti]
 
     def meanDiff(self):
+        '''
+        prints difference in mean before/after
+        '''
         self.cleancheck()
         if self.daily:
             cols = ['daily_entries', 'daily_exits']
@@ -151,6 +185,9 @@ class incident:
                   ({:.1f}%)".format(col, b, a, a - b, (a - b) * 100 / b))
 
     def scatter(self):
+        '''
+        scatterplot per turnstile, before/after
+        '''
         self.cleancheck()
         if self.daily:
             cols = ['daily_entries', 'daily_exits']
@@ -166,20 +203,25 @@ class incident:
         g._legend.set_title('{} Traffic'.format(cols[0][:-8].title()))
         g._legend.texts[0].set_text('Before Incident')
         g._legend.texts[1].set_text('After Incident')
-        plt.xticks([self.data.date_time.min(), self.incident_date, self.data.date_time.max()])
+        plt.xticks([self.data.date_time.min(),
+                   self.incident_date, self.data.date_time.max()])
         sns.move_legend(g, 'upper right', frameon=True)
         g.set_axis_labels('Time', 'Visits/Turnstile')
         plt.tight_layout()
         plt.show(g)
 
     def hist(self):
+        '''
+        histogram per turnstile, before/after
+        '''
         self.cleancheck()
         if self.daily:
             cols = ['daily_entries', 'daily_exits']
         else:
             cols = ['hourly_entries', 'hourly_exits']
 
-        histdf = self.data[['date_time', cols[0], cols[1]]].groupby('date_time', as_index=False).sum()
+        histdf = self.data[['date_time', cols[0], cols[1]]
+                           ].groupby('date_time', as_index=False).sum()
         histdf['freq'] = histdf[cols[0]] + histdf[cols[1]]
         histdf.drop(cols, axis=1)
         g = sns.histplot(
@@ -191,7 +233,8 @@ class incident:
         )
         g.legend(handles=g.legend_.legendHandles, labels=['Before Incident', 'After Incident'],
                  title='{} Traffic'.format(cols[0][:-8].title()), loc='upper left')
-        plt.xticks([self.data.date_time.min(), self.incident_date, self.data.date_time.max()])
+        plt.xticks([self.data.date_time.min(),
+                   self.incident_date, self.data.date_time.max()])
         g.set(xlabel='Time', ylabel='Total Visits')
         plt.tight_layout()
         plt.show(g)
